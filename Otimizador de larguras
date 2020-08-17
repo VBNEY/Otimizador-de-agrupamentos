@@ -9,7 +9,7 @@ gc()
 rm(list = ls())
 
 #Estrutura de leitura lg_infln_bq	Peso
-
+ 
 
 library(dplyr)
 ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,red_min_2,red_min_3,TAPER=40, excluir_lg=c()){
@@ -89,15 +89,15 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
 aumentar_lg_media<-1 #busca também subir a largura média da placa.
 
 #criacao do dataframe com os parâmetros que serão utilizados
-arquivo <- c('UBC','UBC01','UBC02','BC','BC01','Q7','BS','TRIP','DEMAIS')
+arquivo <- c('UBC01','UBC02','UBC','BC','BC03','Q7','BS','TRIP','DEMAIS')
 lg_tran_fx <- c(1490,1490,1490,1490,1490,1490,1490,1490,1490)
 lg_tran_fx2 <- c(1580,1729,1490,1490,1580,1490,1490,1490,1490)
 red_max_fx1 <- c(85,85,85,75,85,75,75,42,62) #(85-12=73) para LG<=lg_tran_fx
 red_max_fx2 <- c(75,75,85,75,75,75,75,42,62) #(85-12=73) para lg_tran_fx <LG <=lg_tran_fx2
 red_max_fx3 <- c(85,85,85,75,85,75,75,42,62) #(85-12=73) para lg_tran_fx2<LG
-red_min_fx1 <- c(18,18,18,18,18,18,16,12,16) #(18-12=6) para LG<=lg_tran_fx
-red_min_fx2 <- c(18,18,18,18,18,18,16,12,16) #(18-12=6) para lg_tran_fx <LG <=lg_tran_fx2
-red_min_fx3 <- c(18,18,18,18,18,18,16,12,16) #(18-12=6) para lg_tran_fx2<LG
+red_min_fx1 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para LG<=lg_tran_fx
+red_min_fx2 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx <LG <=lg_tran_fx2
+red_min_fx3 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx2<LG
 incerteza<-c(12,12,12,12,12,12,12,12,12)
 tol_agrup<-c(1,1,1,1,1,1,1,1,1)
 il<-c(40,40,40,40,40,40,40,40,40)
@@ -231,17 +231,17 @@ for (ifile in arquivo){
  
 
 #ajustar para o preenchimento do padrao---------------------------------
-arquivo <- c('UBC','UBC01','UBC02','BC','BC01','Q7','BS','TRIP','DEMAIS')
+arquivo <- c('UBC01','UBC02','UBC','BC','BC03','Q7','BS','TRIP','DEMAIS')
 ubc<-c('19','20')
 ubc01<-c('01')
 ubc02<-c('02')
-bc<-c('09','10','03','06','27','17','18','30','34')
-bc01<-c('03')
+bc<-c('09','10','06','27','17','18','30','34')
+bc03<-c('03')
 q7<-c('31')
 bs<-c('41','07','29','14','33','13')
 trip<-c('38','43')
 demais<-c('00')
-list_padrao<-list(UBC=ubc,UBC01=ubc01,UBC02=ubc02,BC=bc,BC01=bc01,Q7=q7,BS=bs,TRIP=trip,DEMAIS=demais)
+list_padrao<-list(UBC=ubc,UBC01=ubc01,UBC02=ubc02,BC03=bc03,BC=bc,Q7=q7,BS=bs,TRIP=trip,DEMAIS=demais)
 
 for (ifile in arquivo){ 
   tabela_lg <- read.table(file=paste0('d:/Agrupamento LG/otimizado_',ifile,'.csv'), header = TRUE, sep=';',dec = ".", stringsAsFactors = FALSE)
@@ -250,19 +250,20 @@ for (ifile in arquivo){
     tabela_lg_temp$sgf_ini<-sgf
     tabela_lg_temp$sgf_fim<-sgf
     tabela_lg_temp$esppl_ini<-220
-    tabela_lg_temp$esppl_fim<-230
+    tabela_lg_temp$esppl_fim<-220
     tabela_lg_temp$aco<-ifile
     if(!exists("tabela_lgfinal")){
       tabela_lgfinal<-tabela_lg_temp
     }else{
       tabela_lgfinal<-rbind(tabela_lgfinal,tabela_lg_temp)}
   }
-  write.table(tabela_lgfinal, file=paste0(dir,'otimizado_processado',ifile,'.csv'),row.names=FALSE,sep=";",dec = ".")
+  #write.table(tabela_lgfinal, file=paste0(dir,'otimizado_processado',ifile,'.csv'),row.names=FALSE,sep=";",dec = ".")
     if(!exists("processado_geral")){
       processado_geral<-tabela_lgfinal
     }else{
       processado_geral<-rbind(processado_geral,tabela_lgfinal)}
   rm(tabela_lgfinal)
 }
+tabela_lg<-tabela_lg[order(tabela_lg_temp$aco,tabela_lg_temp$sgf_ini,tabela_lg_temp$lg_placao,decreasing = c(FALSE, TRUE, FALSE)),]
 write.table(processado_geral, file=paste0(dir,'otimizado_processado_geral.csv'),row.names=FALSE,sep=";",dec = ".")
 rm(processado_geral)
