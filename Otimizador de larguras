@@ -51,7 +51,7 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
           x[indice,1]<-lg_placao_avg
           }else{
             if(peso_anterior>peso_posterior){
-              x[indice,1]<-lg_max1+red_min_1}
+              x[indice,1]<-lg_max1+red_min_1+incerteza}
           }
         
       }
