@@ -62,7 +62,38 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
       
       x[indice,2]<-lg_min1
       x[indice,3]<-lg_max1
-    }		
+    }
+    
+    if(indice==1){
+      lg_pos_min <-x[indice+1,2]
+      lg_atual_max <-x[indice,3]
+      peso_atual<-x[indice,4]
+      peso_posterior<-x[indice+1,4]
+      if(peso_atual<=peso_posterior){
+        lg_atual_max<-lg_pos_min-1
+        x[indice,3]<-lg_atual_max
+      }else{
+        lg_pos_min<-lg_atual_max+1
+        x[indice+1,2]<-lg_pos_min
+      }
+    }
+    
+    if(indice==NROW(x)){
+      lg_ant_max <-x[indice-1,3]
+      lg_atual_min <-x[indice,2]
+      peso_atual<-x[indice,4]
+      peso_anterior<-x[indice-1,4]
+      if(peso_atual<=peso_anterior){
+        lg_atual_min<-lg_ant_max+1
+        x[indice,2]<-lg_atual_min
+      }else{
+        lg_ant_max<-lg_atual_min-1
+        x[indice-1,3]<-lg_ant_max
+      }
+    }
+    
+    
+    
   }
   x[,'prioritario']<-NULL
   return(x)
@@ -80,7 +111,7 @@ red_min_fx1 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para LG<=lg_tran_fx
 red_min_fx2 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx <LG <=lg_tran_fx2
 red_min_fx3 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx2<LG
 incerteza<-c(12,12,12,12,12,12,12,12,12)
-tol_agrup<-c(1,1,1,1,1,1,1,1,1)
+tol_agrup<-c(1,1,1,1,1,1,1,2,2)
 il<-c(40,40,40,40,40,40,40,40,40)
 df_redmax<-data.frame(Arquivo=arquivo,Red_min_fx1 =red_min_fx1,Red_min_fx2 =red_min_fx2,Red_min_fx3 =red_min_fx3,
                       Red_max_fx1 =red_max_fx1,Red_max_fx2 =red_max_fx2,Red_max_fx3 =red_max_fx3,
@@ -93,8 +124,6 @@ if(length(arquivo)==1){ifile<-arquivo}
 for (ifile in arquivo){ 
   print(ifile)
   
-  #ifile<-'Q7'
-
   dir <-'d:/Agrupamento LG/'
   BD = paste0(dir,'geral.txt') 
   tabela_lg <- read.table(file = BD, header = TRUE, sep='\t',dec = ".", stringsAsFactors = FALSE)
@@ -182,7 +211,7 @@ for (ifile in arquivo){
   
   #otimiza faixas redundantes ou absurdas
   # dentro da função ajuste_lg_adjacentes foi comentado um código para que esse loop do código principal possa limpar as faixas redundantes ou absurdas
-  for (idloop in 1:30){
+  for (idloop in 1:10){
     #Ajusta intersecção de faixas e deixa a lg placao mais próxima do maior volume
     if(!exists("larg_prior")){larg_prior<-c()}
     tabela_lg<-ajuste_lg_adjacentes(tabela_lg,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,red_min_2,red_min_3,TAPER=IL,larg_prior)
@@ -191,10 +220,8 @@ for (ifile in arquivo){
     tabela_lg[,4] <-0
     for (i in 1:NROW(tabela_lg)){
       tabela_lg[i,4] <- sum(tabela_temp[tabela_temp[,3]>=tabela_lg[i,2] & tabela_temp[,3]<=tabela_lg[i,3],5])}
-    
-    #excluindo faixa de peso zero
-    tabela_lg<-tabela_lg[tabela_lg[,4]>0,]
-    
+
+
     #cria uma coluna para indicar a priorização das larguras mais importantes por volume associado
     tabela_lg<-tabela_lg[order(-tabela_lg[,4],-tabela_lg[,1]),] 
     tabela_lg$prioridade <- seq.int(nrow(tabela_lg))
