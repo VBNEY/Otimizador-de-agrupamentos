@@ -16,6 +16,7 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
   
   #cria o indice que sera usado para localizar as adjacentes
   x$id<-as.integer(seq.int(nrow(x)))
+  x$prioritario<-0
   
   #o loop tem que ser pela prioridade!!!	
   for (i in NROW(x):1){
@@ -31,10 +32,29 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
       lg_min2 <-x[indice+1,2]		
       lg_max0 <-x[indice-1,3]
       lg_max1 <-x[indice,3]
+      peso_anterior<-x[indice-1,4]
+      peso_posterior<-x[indice+1,4]
+      
+      lg_placao_ant<-x[indice-1,1]
+      lg_placao_post<-x[indice+1,1]
+      lg_placao_avg<-round((lg_placao_ant+lg_placao_post)/2,0)
       
       #ao começar da última prioridade para a primeira, pode-se estreitar a faixa
-      if(lg_max0>=lg_min1){lg_min1<-lg_max0+1}
-      if(lg_min2<=lg_max1){lg_max1<-lg_min2-1}
+      if(x[indice,'prioritario']==0){
+        lg_min1<-lg_max0+1
+        lg_max1<-lg_min2-1
+        x[indice-1,'prioritario']<-1
+        x[indice+1,'prioritario']<-1
+        
+        #ajuste da largura do placao menos prioritário, buscando deixar taper <=40mm
+        if(abs(lg_placao_avg-lg_min1)<=TAPER & abs(lg_placao_avg-lg_max1)<=TAPER){
+          x[indice,1]<-lg_placao_avg
+          }else{
+            if(peso_anterior>peso_posterior){
+              x[indice,1]<-lg_max1+red_min_1}
+          }
+        
+      }
       
       #O código abaixo foi comentado para que o loop do código principal possa limpar as faixas desnecessárias
       #com lg forçado, muitas vezes acontece a distorção da largura inf ficar maior que a superior
@@ -44,46 +64,7 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
       x[indice,3]<-lg_max1
     }		
   }
-  
-  #otimiza larguras de placao para a faixa mais próxima de maior volume
-  for (i in 2:(NROW(x)-1)){
-    peso0 <-x[i-1,4]
-    peso1 <-x[i,4]
-    peso2 <-x[i+1,4]
-    lg_min1 <-x[i,2]
-    lg_max1 <-x[i,3]
-    lg_placao0 <- x[i-1,1]
-    lg_placao1 <- x[i,1]
-    
-    #ajusta a largura do placao para ficar mais próxima da adjacente de maior volume		
-    #É melhor deixar o placao próximo da faixa anterior ou posterior
-    lg_prx_sup <- x[i,2]+ifelse((x[i,2]+red_min_1+incerteza)<=lg_fx & (x[i,2]+fx1-incerteza)<=lg_fx,fx1,
-                         ifelse((x[i,2]+red_min_2+incerteza)<=lg_fx2| (x[i,2]+fx2-incerteza)<=lg_fx2,fx2,fx3))-incerteza
-    lg_prx_inf <- x[i,3]+ifelse((x[i,2]+red_min_1+incerteza)<=lg_fx & (x[i,2]+fx1-incerteza)<=lg_fx,red_min_1,
-                         ifelse((x[i,2]+red_min_2+incerteza)<=lg_fx2| (x[i,2]+fx2-incerteza)<=lg_fx2,red_min_2,red_min_3))+incerteza
-    
-    
-    #Não ajusta a largura do placao para larguras excessão
-    if(!x[i,1] %in% excluir_lg){	
-      if(peso2>peso1 & peso2>peso0 ){			
-        if(lg_prx_sup<lg_prx_inf){lg_prx <-lg_prx_inf}else{lg_prx <-lg_prx_sup}
-        x[i,1] <- lg_prx}
-      
-      #Para jogar a largura para baixo, o volume anterior tem que ser superior a 20% em relacao ao posterior	
-      perce_peso <- (peso0-peso2)/(1-peso0)
-      if(peso0>peso1 & peso0>peso2 & perce_peso>=0.2 ){
-        x[i,1] <- lg_prx_inf}
-      
-      #Tentar colocar IL máximo entre laguras consecutivas de placão se possível
-      if((lg_placao1-lg_placao0)>TAPER){
-        lg_placao_temp<-lg_max1+ifelse((x[i,2]+red_min_1+incerteza)<=lg_fx & (x[i,2]+fx1-incerteza)<=lg_fx ,red_min_1,
-                                ifelse((x[i,2]+red_min_2+incerteza)<=lg_fx2| (x[i,2]+fx2-incerteza)<=lg_fx2,red_min_2,red_min_3))+incerteza
-        if((lg_placao_temp-lg_placao0)<=TAPER){
-          x[i,1]<-lg_placao_temp
-        }				
-      }			
-    }
-  }	
+  x[,'prioritario']<-NULL
   return(x)
 }
 aumentar_lg_media<-1 #busca também subir a largura média da placa.
@@ -92,9 +73,9 @@ aumentar_lg_media<-1 #busca também subir a largura média da placa.
 arquivo <- c('UBC01','UBC02','UBC','BC','BC03','Q7','BS','TRIP','DEMAIS')
 lg_tran_fx <- c(1490,1490,1490,1490,1490,1490,1490,1490,1490)
 lg_tran_fx2 <- c(1580,1729,1490,1490,1580,1490,1490,1490,1490)
-red_max_fx1 <- c(85,85,85,75,85,75,75,42,62) #(85-12=73) para LG<=lg_tran_fx
-red_max_fx2 <- c(75,75,85,75,75,75,75,42,62) #(85-12=73) para lg_tran_fx <LG <=lg_tran_fx2
-red_max_fx3 <- c(85,85,85,75,85,75,75,42,62) #(85-12=73) para lg_tran_fx2<LG
+red_max_fx1 <- c(85,85,85,75,75,75,75,42,62) #(85-12=73) para LG<=lg_tran_fx
+red_max_fx2 <- c(75,75,85,75,62,75,75,42,62) #(85-12=73) para lg_tran_fx <LG <=lg_tran_fx2
+red_max_fx3 <- c(85,85,85,75,75,75,75,42,62) #(85-12=73) para lg_tran_fx2<LG
 red_min_fx1 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para LG<=lg_tran_fx
 red_min_fx2 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx <LG <=lg_tran_fx2
 red_min_fx3 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx2<LG
@@ -112,11 +93,13 @@ if(length(arquivo)==1){ifile<-arquivo}
 for (ifile in arquivo){ 
   print(ifile)
   
+  #ifile<-'Q7'
+
   dir <-'d:/Agrupamento LG/'
-  extensao <-'.txt'
-  BD = paste0(dir,'geral',extensao) 
+  BD = paste0(dir,'geral.txt') 
   tabela_lg <- read.table(file = BD, header = TRUE, sep='\t',dec = ".", stringsAsFactors = FALSE)
-  tabela_lg<-tabela_lg[tabela_lg$GrupoSGF==ifile,c('lg_infln_bq','Peso')]
+  tabela_lg<-tabela_lg[tabela_lg[,1]==ifile,c('lg_infln_bq','Peso')]
+  tabela_lg<-data.frame(lapply(tabela_lg, function(x) as.numeric(gsub(",",".",gsub(" ","", x)))))
   
   lg_ped_min <- as.numeric(749+seq(1:(1881-750)))
   peso_inicial <- as.numeric(rep_len(1, 1881-750))
@@ -139,10 +122,12 @@ for (ifile in arquivo){
   
   lg_fx <-df_redmax[df_redmax$Arquivo==ifile,'Lg_tran'] #largura de transição para critérios diferentes
   lg_fx2 <-df_redmax[df_redmax$Arquivo==ifile,'Lg_tran2'] #largura de transição para critérios diferentes
-  tabela_lg$idfx<-ifelse((tabela_lg[,1]+red_min_1+incerteza)<=lg_fx & (tabela_lg[,1]+fx1-incerteza)<=lg_fx,1,
-                  ifelse((tabela_lg[,1]+red_min_2+incerteza)<=lg_fx2 | (tabela_lg[,1]+fx2-incerteza)<=lg_fx2,2,3))#coluna temporária
   
+  tabela_lg[(tabela_lg[,1])<lg_fx2,'idfx']<-2
+  tabela_lg[(tabela_lg[,1])>=lg_fx2,'idfx']<-3
+  tabela_lg[(tabela_lg[,1]+fx1)<lg_fx,'idfx']<-1
   tabela_lg$lg_placao <- tabela_lg[,1]+ifelse(tabela_lg$idfx==1,fx1,ifelse(tabela_lg$idfx==2,fx2,fx3)) #Ajuste para tranformar a faixa de pedido de BQ para placao
+  
   tabela_lg$lg_ped_max <- tabela_lg$lg_placao-ifelse(tabela_lg$idfx==1,red_min_1,ifelse(tabela_lg$idfx==2,red_min_2,red_min_3))-incerteza
   tabela_lg[,2]<-tabela_lg[,2]*(1+aumentar_lg_media*tabela_lg[,3]) #tabela_lg[,2]=Qtde de placao * #tabela_lg[,3]=Largura do placao, seria quase uma unidade de peso
   tabela_lg$peso_acumulado_max<-0
@@ -150,6 +135,8 @@ for (ifile in arquivo){
   tabela_lg$peso_acum_proc<-0
   tabela_lg$id<-as.numeric(seq.int(nrow(tabela_lg)))
   tabela_lg$idfx<-NULL
+  
+
   
   for (l in 1:NROW(tabela_lg)){
     #acumula o peso das faixas de pedidos na linha da largura de cada placao 
@@ -176,6 +163,9 @@ for (ifile in arquivo){
     #coloca o peso acumulado de faixas já dela
     tabela_lg[,7][tabela_lg[,4]==lg_max_pedido_temp[1,1]]<- peso_acumulado_max 
   }
+  #tabbk<-tabela_lg
+  #tabela_lg<-tabbk
+  #str(tabela_lg)
   
   #Mudando as posicoes das colunas e deixando de selecionar as não importantes
   tabela_lg<-tabela_lg[,c(3,1,4,7,6)] 
@@ -241,7 +231,7 @@ q7<-c('31')
 bs<-c('41','07','29','14','33','13')
 trip<-c('38','43')
 demais<-c('00')
-list_padrao<-list(UBC=ubc,UBC01=ubc01,UBC02=ubc02,BC03=bc03,BC=bc,Q7=q7,BS=bs,TRIP=trip,DEMAIS=demais)
+list_padrao<-list(UBC=ubc,UBC01=ubc01,UBC02=ubc02,BC=bc,BC03=bc03,Q7=q7,BS=bs,TRIP=trip,DEMAIS=demais)
 
 for (ifile in arquivo){ 
   tabela_lg <- read.table(file=paste0('d:/Agrupamento LG/otimizado_',ifile,'.csv'), header = TRUE, sep=';',dec = ".", stringsAsFactors = FALSE)
@@ -249,8 +239,8 @@ for (ifile in arquivo){
     tabela_lg_temp<-tabela_lg
     tabela_lg_temp$sgf_ini<-sgf
     tabela_lg_temp$sgf_fim<-sgf
-    tabela_lg_temp$esppl_ini<-220
-    tabela_lg_temp$esppl_fim<-220
+    tabela_lg_temp$esppl_ini<-215
+    tabela_lg_temp$esppl_fim<-239
     tabela_lg_temp$aco<-ifile
     if(!exists("tabela_lgfinal")){
       tabela_lgfinal<-tabela_lg_temp
