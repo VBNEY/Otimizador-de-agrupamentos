@@ -33,6 +33,7 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
       lg_max0 <-x[indice-1,3]
       lg_max1 <-x[indice,3]
       peso_anterior<-x[indice-1,4]
+      peso_atual<-x[indice,4]
       peso_posterior<-x[indice+1,4]
       
       lg_placao_ant<-x[indice-1,1]
@@ -43,8 +44,8 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
       if(x[indice,'prioritario']==0){
         lg_min1<-lg_max0+1
         lg_max1<-lg_min2-1
-        x[indice-1,'prioritario']<-1
-        x[indice+1,'prioritario']<-1
+        
+        
         
         #ajuste da largura do placao menos prioritário, buscando deixar taper <=40mm
         if(abs(lg_placao_avg-lg_min1)<=TAPER & abs(lg_placao_avg-lg_max1)<=TAPER){
@@ -60,8 +61,16 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
       #com lg forçado, muitas vezes acontece a distorção da largura inf ficar maior que a superior
       #if(lg_min1>lg_max1){lg_min1<-lg_max1}
       
-      x[indice,2]<-lg_min1
-      x[indice,3]<-lg_max1
+      if(x[indice,2]<x[indice-1,3]){
+        x[indice-1,'prioritario']<-1
+        x[indice,2]<-lg_min1
+      }
+      
+      if(x[indice,3]>x[indice+1,2]){
+        x[indice+1,'prioritario']<-1
+        x[indice,3]<-lg_max1
+      }
+      
     }
     
     if(indice==1){
@@ -104,9 +113,11 @@ aumentar_lg_media<-1 #busca também subir a largura média da placa.
 arquivo <- c('UBC01','UBC02','UBC','BC','BC03','Q7','BS','TRIP','DEMAIS')
 lg_tran_fx <- c(1490,1490,1490,1490,1490,1490,1490,1490,1490)
 lg_tran_fx2 <- c(1580,1729,1490,1490,1580,1490,1490,1490,1490)
+
 red_max_fx1 <- c(85,85,85,75,75,75,75,42,62) #(85-12=73) para LG<=lg_tran_fx
 red_max_fx2 <- c(75,75,85,75,62,75,75,42,62) #(85-12=73) para lg_tran_fx <LG <=lg_tran_fx2
 red_max_fx3 <- c(85,85,85,75,75,75,75,42,62) #(85-12=73) para lg_tran_fx2<LG
+
 red_min_fx1 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para LG<=lg_tran_fx
 red_min_fx2 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx <LG <=lg_tran_fx2
 red_min_fx3 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx2<LG
@@ -158,7 +169,7 @@ for (ifile in arquivo){
   tabela_lg$lg_placao <- tabela_lg[,1]+ifelse(tabela_lg$idfx==1,fx1,ifelse(tabela_lg$idfx==2,fx2,fx3)) #Ajuste para tranformar a faixa de pedido de BQ para placao
   
   tabela_lg$lg_ped_max <- tabela_lg$lg_placao-ifelse(tabela_lg$idfx==1,red_min_1,ifelse(tabela_lg$idfx==2,red_min_2,red_min_3))-incerteza
-  tabela_lg[,2]<-tabela_lg[,2]*(1+aumentar_lg_media*tabela_lg[,3]) #tabela_lg[,2]=Qtde de placao * #tabela_lg[,3]=Largura do placao, seria quase uma unidade de peso
+  #tabela_lg[,2]<-tabela_lg[,2]*(1+aumentar_lg_media*tabela_lg[,3]) #tabela_lg[,2]=Qtde de placao * #tabela_lg[,3]=Largura do placao, seria quase uma unidade de peso
   tabela_lg$peso_acumulado_max<-0
   tabela_lg$peso_original<-tabela_lg[,2]
   tabela_lg$peso_acum_proc<-0
@@ -166,7 +177,6 @@ for (ifile in arquivo){
   tabela_lg$idfx<-NULL
   
 
-  
   for (l in 1:NROW(tabela_lg)){
     #acumula o peso das faixas de pedidos na linha da largura de cada placao 
     #É importante esse loop ficar dentro do outro loop, só assim calcula o peso e desconsidera volumes já considerados
@@ -192,10 +202,7 @@ for (ifile in arquivo){
     #coloca o peso acumulado de faixas já dela
     tabela_lg[,7][tabela_lg[,4]==lg_max_pedido_temp[1,1]]<- peso_acumulado_max 
   }
-  #tabbk<-tabela_lg
-  #tabela_lg<-tabbk
-  #str(tabela_lg)
-  
+
   #Mudando as posicoes das colunas e deixando de selecionar as não importantes
   tabela_lg<-tabela_lg[,c(3,1,4,7,6)] 
   
@@ -209,9 +216,12 @@ for (ifile in arquivo){
   tabela_lg$prioridade <- seq.int(nrow(tabela_lg))
   tabela_lg<-tabela_lg[order(tabela_lg[,1],tabela_lg[,2]),]
   
+  #tabbk<-tabela_lg
+  #tabela_lg<-tabbk
+  
   #otimiza faixas redundantes ou absurdas
   # dentro da função ajuste_lg_adjacentes foi comentado um código para que esse loop do código principal possa limpar as faixas redundantes ou absurdas
-  for (idloop in 1:10){
+  for (idloop in 1:1){
     #Ajusta intersecção de faixas e deixa a lg placao mais próxima do maior volume
     if(!exists("larg_prior")){larg_prior<-c()}
     tabela_lg<-ajuste_lg_adjacentes(tabela_lg,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,red_min_2,red_min_3,TAPER=IL,larg_prior)
@@ -219,7 +229,7 @@ for (ifile in arquivo){
     #Recalculado do peso acumulado por faixa
     tabela_lg[,4] <-0
     for (i in 1:NROW(tabela_lg)){
-      tabela_lg[i,4] <- sum(tabela_temp[tabela_temp[,3]>=tabela_lg[i,2] & tabela_temp[,3]<=tabela_lg[i,3],5])}
+      tabela_lg[i,4] <- sum(tabela_temp[tabela_temp[,3]>=tabela_lg[i,2] & tabela_temp[,3]<=tabela_lg[i,3],4])}
 
 
     #cria uma coluna para indicar a priorização das larguras mais importantes por volume associado
@@ -268,6 +278,7 @@ for (ifile in arquivo){
     tabela_lg_temp$sgf_fim<-sgf
     tabela_lg_temp$esppl_ini<-215
     tabela_lg_temp$esppl_fim<-239
+    
     tabela_lg_temp$aco<-ifile
     if(!exists("tabela_lgfinal")){
       tabela_lgfinal<-tabela_lg_temp
