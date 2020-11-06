@@ -295,3 +295,37 @@ for (ifile in arquivo){
 tabela_lg<-tabela_lg[order(tabela_lg_temp$aco,tabela_lg_temp$sgf_ini,tabela_lg_temp$lg_placao,decreasing = c(FALSE, TRUE, FALSE)),]
 write.table(processado_geral, file=paste0(dir,'otimizado_processado_geral.csv'),row.names=FALSE,sep=";",dec = ".")
 rm(processado_geral)
+
+
+
+BD = 'D:/Agrupamento LG/otimizado_processado_geral.csv'
+dataset <- read.table(file = BD, header = TRUE, sep=';',dec = ".", stringsAsFactors = FALSE)
+
+#Grupos dos aços distintos
+sgf_distintos<-unique(dataset$sgf_ini)
+
+df_consolidado<-data.frame(lg_real=0,lgplacao=0,lgmin=0,lgmax=0,sgf=0)
+df_temp<-df_consolidado
+df_consolidado<-df_consolidado[df_consolidado>0,]
+for(aco in sgf_distintos){
+  temp_otimizado<-dataset[dataset[,9]==aco,c(1,2,3,9)]
+
+  for(lg_placao in temp_otimizado[,1]){
+    temp_lgplacao<-temp_otimizado[temp_otimizado[,1]==lg_placao,1]
+    temp_lgmin<-temp_otimizado[temp_otimizado[,1]==lg_placao,2]
+    temp_lgmax<-temp_otimizado[temp_otimizado[,1]==lg_placao,3]
+    temp_sgf<-temp_otimizado[temp_otimizado[,1]==lg_placao,4]
+    
+    for(lg_real in temp_lgmin:temp_lgmax){
+      df_temp$lg_real<-lg_real
+      df_temp$lgplacao<-temp_lgplacao
+      df_temp$lgmin<-temp_lgmin
+      df_temp$lgmax<-temp_lgmax
+      df_temp$sgf<-temp_sgf
+      df_consolidado<-rbind(df_consolidado,df_temp)
+    }
+  }
+}
+
+
+write.table(df_consolidado, file="tabela_largura.csv",row.names=FALSE,sep=";")
