@@ -9,7 +9,7 @@ gc()
 rm(list = ls())
 
 #Estrutura de leitura lg_infln_bq	Peso
- 
+
 
 library(dplyr)
 ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,red_min_2,red_min_3,TAPER=40, excluir_lg=c()){
@@ -50,10 +50,10 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
         #ajuste da largura do placao menos prioritário, buscando deixar taper <=40mm
         if(abs(lg_placao_avg-lg_min1)<=TAPER & abs(lg_placao_avg-lg_max1)<=TAPER){
           x[indice,1]<-lg_placao_avg
-          }else{
-            if(peso_anterior>peso_posterior){
-              x[indice,1]<-lg_max1+red_min_1+incerteza}
-          }
+        }else{
+          if(peso_anterior>peso_posterior){
+            x[indice,1]<-lg_max1+red_min_1+incerteza}
+        }
         
       }
       
@@ -169,14 +169,14 @@ for (ifile in arquivo){
   tabela_lg$lg_placao <- tabela_lg[,1]+ifelse(tabela_lg$idfx==1,fx1,ifelse(tabela_lg$idfx==2,fx2,fx3)) #Ajuste para tranformar a faixa de pedido de BQ para placao
   
   tabela_lg$lg_ped_max <- tabela_lg$lg_placao-ifelse(tabela_lg$idfx==1,red_min_1,ifelse(tabela_lg$idfx==2,red_min_2,red_min_3))-incerteza
-  #tabela_lg[,2]<-tabela_lg[,2]*(1+aumentar_lg_media*tabela_lg[,3]) #tabela_lg[,2]=Qtde de placao * #tabela_lg[,3]=Largura do placao, seria quase uma unidade de peso
+  tabela_lg[,2]<-tabela_lg[,2]*(1+aumentar_lg_media*tabela_lg[,'lg_placao']) #tabela_lg[,2]=Qtde de placao * #tabela_lg[,'lg_placao']=Largura do placao, seria quase uma unidade de peso
   tabela_lg$peso_acumulado_max<-0
   tabela_lg$peso_original<-tabela_lg[,2]
   tabela_lg$peso_acum_proc<-0
   tabela_lg$id<-as.numeric(seq.int(nrow(tabela_lg)))
   tabela_lg$idfx<-NULL
   
-
+  
   for (l in 1:NROW(tabela_lg)){
     #acumula o peso das faixas de pedidos na linha da largura de cada placao 
     #É importante esse loop ficar dentro do outro loop, só assim calcula o peso e desconsidera volumes já considerados
@@ -202,7 +202,7 @@ for (ifile in arquivo){
     #coloca o peso acumulado de faixas já dela
     tabela_lg[,7][tabela_lg[,4]==lg_max_pedido_temp[1,1]]<- peso_acumulado_max 
   }
-
+  
   #Mudando as posicoes das colunas e deixando de selecionar as não importantes
   tabela_lg<-tabela_lg[,c(3,1,4,7,6)] 
   
@@ -230,8 +230,8 @@ for (ifile in arquivo){
     tabela_lg[,4] <-0
     for (i in 1:NROW(tabela_lg)){
       tabela_lg[i,4] <- sum(tabela_temp[tabela_temp[,3]>=tabela_lg[i,2] & tabela_temp[,3]<=tabela_lg[i,3],4])}
-
-
+    
+    
     #cria uma coluna para indicar a priorização das larguras mais importantes por volume associado
     tabela_lg<-tabela_lg[order(-tabela_lg[,4],-tabela_lg[,1]),] 
     tabela_lg$prioridade <- seq.int(nrow(tabela_lg))
@@ -255,7 +255,7 @@ for (ifile in arquivo){
   write.table(tabela_lg, file=paste0(dir,'otimizado_',ifile,'.csv'),row.names=FALSE,sep=";",dec = ".")
   
 }# chave do loop do arquivo
- 
+
 
 #ajustar para o preenchimento do padrao---------------------------------
 arquivo <- c('UBC01','UBC02','UBC','BC','BC03','Q7','BS','TRIP','DEMAIS')
@@ -286,46 +286,12 @@ for (ifile in arquivo){
       tabela_lgfinal<-rbind(tabela_lgfinal,tabela_lg_temp)}
   }
   #write.table(tabela_lgfinal, file=paste0(dir,'otimizado_processado',ifile,'.csv'),row.names=FALSE,sep=";",dec = ".")
-    if(!exists("processado_geral")){
-      processado_geral<-tabela_lgfinal
-    }else{
-      processado_geral<-rbind(processado_geral,tabela_lgfinal)}
+  if(!exists("processado_geral")){
+    processado_geral<-tabela_lgfinal
+  }else{
+    processado_geral<-rbind(processado_geral,tabela_lgfinal)}
   rm(tabela_lgfinal)
 }
 tabela_lg<-tabela_lg[order(tabela_lg_temp$aco,tabela_lg_temp$sgf_ini,tabela_lg_temp$lg_placao,decreasing = c(FALSE, TRUE, FALSE)),]
 write.table(processado_geral, file=paste0(dir,'otimizado_processado_geral.csv'),row.names=FALSE,sep=";",dec = ".")
 rm(processado_geral)
-
-
-
-BD = 'D:/Agrupamento LG/otimizado_processado_geral.csv'
-dataset <- read.table(file = BD, header = TRUE, sep=';',dec = ".", stringsAsFactors = FALSE)
-
-#Grupos dos aços distintos
-sgf_distintos<-unique(dataset$sgf_ini)
-
-df_consolidado<-data.frame(lg_real=0,lgplacao=0,lgmin=0,lgmax=0,sgf=0)
-df_temp<-df_consolidado
-df_consolidado<-df_consolidado[df_consolidado>0,]
-for(aco in sgf_distintos){
-  temp_otimizado<-dataset[dataset[,9]==aco,c(1,2,3,9)]
-
-  for(lg_placao in temp_otimizado[,1]){
-    temp_lgplacao<-temp_otimizado[temp_otimizado[,1]==lg_placao,1]
-    temp_lgmin<-temp_otimizado[temp_otimizado[,1]==lg_placao,2]
-    temp_lgmax<-temp_otimizado[temp_otimizado[,1]==lg_placao,3]
-    temp_sgf<-temp_otimizado[temp_otimizado[,1]==lg_placao,4]
-    
-    for(lg_real in temp_lgmin:temp_lgmax){
-      df_temp$lg_real<-lg_real
-      df_temp$lgplacao<-temp_lgplacao
-      df_temp$lgmin<-temp_lgmin
-      df_temp$lgmax<-temp_lgmax
-      df_temp$sgf<-temp_sgf
-      df_consolidado<-rbind(df_consolidado,df_temp)
-    }
-  }
-}
-
-
-write.table(df_consolidado, file="tabela_largura.csv",row.names=FALSE,sep=";")
