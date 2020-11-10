@@ -107,7 +107,7 @@ ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,re
   x[,'prioritario']<-NULL
   return(x)
 }
-aumentar_lg_media<-0 #busca também subir a largura média da placa.
+aumentar_lg_media<-1 #busca também subir a largura média da placa.
 
 proposta_agrupamento<-'LTQ'
 
@@ -254,7 +254,7 @@ for (ifile in arquivo){
   if(exists("output_temp2")){rm("output_temp2")}
   for(achar_vazio in 1:(NROW(output)-1)){#caso existam vazios entre linhas adjacentes
     if((tabela_lg[achar_vazio+1,2]-tabela_lg[achar_vazio,3])>1){
-      output_temp<- data.frame(lg_placao=tabela_lg[achar_vazio,3]+1+red_min_1+incerteza,lg_ped_min=tabela_lg[achar_vazio,3]+1,lg_ped_max=tabela_lg[achar_vazio+1,2]-1,peso_acum=1,prioridade=NROW(tabela_lg))
+      output_temp<- data.frame(lg_placao=ifelse(tabela_lg[achar_vazio+1,1]!=(tabela_lg[achar_vazio,3]+20),tabela_lg[achar_vazio,3]+20,tabela_lg[achar_vazio+1,1]-1),lg_ped_min=tabela_lg[achar_vazio,3]+1,lg_ped_max=tabela_lg[achar_vazio+1,2]-1,peso_acum=1,prioridade=NROW(tabela_lg))
       if(exists("output_temp2")){output_temp2<-rbind(output_temp2,output_temp)}else{output_temp2<-output_temp}}}
   
   if(exists("output_temp2")){
