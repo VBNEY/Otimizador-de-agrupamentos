@@ -1,163 +1,224 @@
-# TODO: Add comment
-# 
-# Author: n11176
-###############################################################################
-library("mise")
-mise()
-plot('x')
-gc()
-rm(list = ls())
 
 #Estrutura de leitura lg_infln_bq	Peso
-
+dir <-'d:/Agrupamento LG/'
+BD = paste0(dir,'geral.txt') 
+tabela_lg <- read.table(file = BD, header = TRUE, sep='\t',dec = ".", stringsAsFactors = FALSE)
+aco_disponíveis<-unique(tabela_lg$grupo_aco) #importante para garantir que somente coincidente sejam processados
+#aco_disponíveis<-c('BC-MEX')
+rm("tabela_lg")
 
 library(dplyr)
-ajuste_lg_adjacentes<-function(x,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,red_min_2,red_min_3,TAPER=40){
+ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,red_max3,Lg_tran,Lg_tran2,tol_agrup=1,prioriza_O0_P1=0,IL=40){
+  x<-x[x[,'lg_ped_min']<=x[,'lg_ped_max'],]
+  if(prioriza_O0_P1==1){
+    x<-x[order(-x[,'peso_acum_geral']),] 
+    x$prioridade <- seq.int(nrow(x))}
+  x[,'peso_acum_geral']<-NULL
+  x<-x[order(x[,'lg_ped_min']),]
+  x$iduso<-0
+  x$idnull<-0
   
-  #cria o indice que sera usado para localizar as adjacentes
-  x$id<-as.integer(seq.int(nrow(x)))
-  x$prioritario<-0
-  
-  #o loop tem que ser pela prioridade!!!	
   for (i in NROW(x):1){
     
-    #acha o indice da prioridade em questao, começando pela última prioridade
-    #A última prioridade cede largura para faixas mais prioritárias
-    indice<-x[x[,5]==i,6]
-    
-    #garante que não é nem o primeiro e nem a última linha
+    indice<-which(x[,'prioridade']==i)
     if(indice>1 & indice<NROW(x)){
       
-      lg_min1 <-x[indice,2]
-      lg_min2 <-x[indice+1,2]		
-      lg_max0 <-x[indice-1,3]
-      lg_max1 <-x[indice,3]
-      peso_anterior<-x[indice-1,4]
-      peso_atual<-x[indice,4]
-      peso_posterior<-x[indice+1,4]
+      lg_placao_ant<-x[indice-1,'lg_placao']
+      lg_pedinf_ant<-x[indice-1,'lg_ped_min']
+      lg_pedmax_ant<-x[indice-1,'lg_ped_max']
+      prior_ant<-x[indice-1,'prioridade']
       
-      lg_placao_ant<-x[indice-1,1]
-      lg_placao_post<-x[indice+1,1]
-      lg_placao_avg<-round((lg_placao_ant+lg_placao_post)/2,0)
+      lg_placao_atual<-x[indice,'lg_placao']
+      lg_pedinf_atual<-x[indice,'lg_ped_min']
+      lg_pedmax_atual<-x[indice,'lg_ped_max']
+      prior_atual<-x[indice,'prioridade']
       
-      #ao começar da última prioridade para a primeira, pode-se estreitar a faixa
-      if(x[indice,'prioritario']==0){
-        lg_min1<-lg_max0+1
-        lg_max1<-lg_min2-1
+      lg_placao_post<-x[indice+1,'lg_placao']
+      lg_pedinf_post<-x[indice+1,'lg_ped_min']
+      lg_pedmax_post<-x[indice+1,'lg_ped_max']
+      prior_post<-x[indice+1,'prioridade']
+      
+      
+      if(lg_pedmax_ant>=lg_pedinf_atual & x[indice,'iduso']==0){
+        lg_pedinf_atual<-lg_pedmax_ant+1
+        x[indice,'lg_ped_min']<-lg_pedinf_atual
+        if(lg_pedinf_atual>lg_pedmax_atual){
+          lg_pedmax_atual<-lg_pedinf_atual
+          x[indice,'lg_ped_max']<-lg_pedmax_atual}}
+      
+      if(lg_pedmax_atual>=lg_pedinf_post & x[indice,'iduso']==0){
+        lg_pedmax_atual<-lg_pedinf_post-1
+        x[indice,'lg_ped_max']<-lg_pedmax_atual
+        if(lg_pedinf_atual>lg_pedmax_atual){
+          lg_pedmax_atual<-lg_pedinf_atual
+          x[indice,'lg_ped_max']<-lg_pedmax_atual}}
+      
+      #Qual a redução mínima adequada...
+      reducao_minina<-red_min2
+      if(lg_pedmax_atual<Lg_tran){reducao_minina<-red_min1}
+      if(lg_pedinf_atual>Lg_tran2){reducao_minina<-red_min3}
+      
+      #Qual a redução máxima adequada...
+      reducao_maxima<-red_max2
+      if(lg_pedmax_atual<Lg_tran){reducao_maxima<-red_max1}
+      if(lg_pedinf_atual>Lg_tran2){reducao_maxima<-red_max3}
+      
+      
+      #Se o anterior for prioritário, a maior aproximação com o anterior é a lg_pedido +redução mínima
+      #se ML for maior que 40mm para qualquer lado, aproxima do de maior volume
+      lgfxmin<-lg_pedinf_atual+reducao_minina
+      lgfxmax<-lg_pedinf_atual+reducao_maxima
         
+      if(prior_ant<prior_post){
+        lg_temp_medio<-lg_pedmax_atual+reducao_minina
+        fx_temp<-lgfxmax:lgfxmin
+        idmult<-1
+      }else{
+        lg_temp_medio<-lg_pedinf_atual+reducao_maxima
+        fx_temp<-lgfxmin:lgfxmax
+        idmult<--1
+      }
         
-        
-        #ajuste da largura do placao menos prioritário, buscando deixar taper <=40mm
-        if(abs(lg_placao_avg-lg_min1)<=TAPER & abs(lg_placao_avg-lg_max1)<=TAPER){
-          x[indice,1]<-lg_placao_avg
-        }else{
-          if(peso_anterior>peso_posterior){
-            x[indice,1]<-lg_max1+red_min_1+incerteza}
+      for(lg_temp in fx_temp){
+        if((lg_temp-lg_placao_ant)<=IL & (lg_placao_post-lg_temp)<=IL){
+          lg_temp_medio<-lg_temp
         }
-        
       }
       
-      #O código abaixo foi comentado para que o loop do código principal possa limpar as faixas desnecessárias
-      #com lg forçado, muitas vezes acontece a distorção da largura inf ficar maior que a superior
-      #if(lg_min1>lg_max1){lg_min1<-lg_max1}
-      
-      if(x[indice,2]<=x[indice-1,3]){
-        x[indice-1,'prioritario']<-1
-        x[indice,2]<-lg_min1
+      id_chave<-0
+      for(loop_test in 0:5){
+        lg_temp_medio<-lg_temp_medio+loop_test*idmult
+        if(abs(lg_placao_post-lg_temp_medio)<=IL & abs(lg_temp_medio-lg_placao_ant)<=IL &
+            lg_temp_medio>=(lg_pedmax_atual+reducao_minina) & lg_temp_medio<=(lg_pedinf_atual+reducao_maxima) &
+            length(x[x[,'lg_placao']==lg_temp_medio,'lg_placao'])==0 & id_chave==0){
+            id_chave<-1
+            lg_placao_atual<-lg_temp_medio}
       }
-      
-      if(x[indice,3]>=x[indice+1,2]){
-        x[indice+1,'prioritario']<-1
-        x[indice,3]<-lg_max1
-      }
-      
+      x[indice,'lg_placao']<-lg_placao_atual
+      x[indice,'iduso']<-1
     }
-    
-    if(indice==1){
-      lg_pos_min <-x[indice+1,2]
-      lg_atual_max <-x[indice,3]
-      peso_atual<-x[indice,4]
-      peso_posterior<-x[indice+1,4]
-      if(peso_atual<=peso_posterior){
-        lg_atual_max<-lg_pos_min-1
-        x[indice,3]<-lg_atual_max
-      }else{
-        lg_pos_min<-lg_atual_max+1
-        x[indice+1,2]<-lg_pos_min
-      }
-    }
-    
-    if(indice==NROW(x)){
-      lg_ant_max <-x[indice-1,3]
-      lg_atual_min <-x[indice,2]
-      peso_atual<-x[indice,4]
-      peso_anterior<-x[indice-1,4]
-      if(peso_atual<=peso_anterior){
-        lg_atual_min<-lg_ant_max+1
-        x[indice,2]<-lg_atual_min
-      }else{
-        lg_ant_max<-lg_atual_min-1
-        x[indice-1,3]<-lg_ant_max
-      }
-    }
-    
-    
-    
   }
-  x[,'prioritario']<-NULL
+  
+  #DENTRO DA TOLERANCIA PARA AGRUPAR
+  indices<-which((x[,'lg_ped_max']-x[,'lg_ped_min'])<=(tol_agrup-1))
+  indices<-setdiff(indices,c(1,NROW(x)))
+  for(indice in indices){
+    if(x[indice-1,'peso_acum']<x[indice+1,'peso_acum']){#incorpora a faixa estreita na largura de menor volume
+      x[indice-1,'lg_placao']<-x[indice-1,'lg_placao']+(x[indice,'lg_ped_max']-x[indice,'lg_ped_min'])
+      x[indice-1,'lg_ped_max']<-x[indice,'lg_ped_max']
+    }else{
+      x[indice+1,'lg_ped_min']<-x[indice,'lg_ped_min']
+    }
+    x[indice,'idnull']<-NA
+  }
+  x<-x[complete.cases(x),]
+  x$idnull<-NULL
+  x$iduso<-NULL
+  x<-x[order(x[,'lg_ped_min']),]
+  
+  #PREENCHER VAZIOS DE INTERFACE--------------------------------------------------------
+  for(achar_vazio in 1:(NROW(x)-1)){#caso existam vazios entre linhas adjacentes
+    if((x[achar_vazio+1,2]-x[achar_vazio,3])>1){
+      
+      #Qual a redução mínima adequada...
+      reducao_minina<-red_min2
+      if(x[achar_vazio+1,2]<Lg_tran){reducao_minina<-red_min1}
+      if(x[achar_vazio,3]>Lg_tran2){reducao_minina<-red_min3}
+      
+      #Qual a redução máxima adequada...
+      reducao_maxima<-red_max2
+      if(x[achar_vazio+1,2]<Lg_tran){reducao_maxima<-red_max1}
+      if(x[achar_vazio,3]>Lg_tran2){reducao_maxima<-red_max3}
+      
+      lg_placao_temp<-x[achar_vazio,3]+1+reducao_maxima-incerteza
+      output_temp<- data.frame(lg_placao=lg_placao_temp,lg_ped_min=x[achar_vazio,3]+1,lg_ped_max=x[achar_vazio+1,2]-1,peso_acum=0.01,prioridade=NROW(x)+1)
+      if(exists("output_temp2")){output_temp2<-rbind(output_temp2,output_temp)}else{output_temp2<-output_temp}}}
+  if(exists("output_temp2")){x<-rbind(x,output_temp2)}
+  #Ordenação para coerencia  
+  x<-x[order(-x[,'peso_acum']),] 
+  x$prioridade <- seq.int(nrow(x))
+  x<-x[order(x[,'lg_ped_min']),]
   return(x)
 }
+simular0_gerarpadrao1<-1 #gerar padrao por SGF ltq ou grupo de aco para simulacao
+if(exists("df_redmax")){rm("df_redmax")}
 
-aumentar_lg_media<-1 #busca também subir a largura média da placa.
-simular0_gerarpadrao1<-0 #gerar padrao por SGF ltq ou grupo de aco para simulacao
+
+################################
+################################
+################################
+################################
 proposta_agrupamento<-'LTQ'
+dtini<-Sys.time()
+redmin_loop<-0
+redmin_loopfx2<-0
+Aumentar_media_loop<-0
+Aumentar_red_loop<-0
+Aumentar_red_loop_fx2<-0
+tipo_priorizacao<-0
+tol_agrup<-1
+fx_add<-0
 
+
+
+
+#criacao do dataframe com os parâmetros que serão utilizados
 if(proposta_agrupamento=='LTQ'){
-  #criacao do dataframe com os parâmetros que serão utilizados
-  arquivo <- c('UBC01','UBC02','UBC','BC','BC03','Q7','BS','TRIP','DEMAIS')
-  lg_tran_fx <- c(1490,1490,1490,1490,1490,1490,1490,1490,1490)
-  lg_tran_fx2 <- c(1580,1729,1490,1490,1580,1490,1490,1490,1490)
+  #aumentar_lg_media<-1 busca também subir a largura média da placa.
   
-  red_max_fx1 <- c(85,85,85,75,75,75,75,42,62) #(85-12=73) para LG<=lg_tran_fx
-  red_max_fx2 <- c(75,75,85,75,62,75,75,42,62) #(85-12=73) para lg_tran_fx <LG <=lg_tran_fx2
-  red_max_fx3 <- c(85,85,85,75,75,75,75,42,62) #(85-12=73) para lg_tran_fx2<LG
+  df_UBC01<-data.frame(Arquivo='UBC01',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =85+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =85+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1580+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_UBC02<-data.frame(Arquivo='UBC02',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =85+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =85+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1729+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_UBC<-data.frame(Arquivo='UBC',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =85+Aumentar_red_loop,Red_max_fx2 =85+Aumentar_red_loop_fx2,Red_max_fx3 =85+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_BC<-data.frame(Arquivo='BC',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =75+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =75+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_BC03<-data.frame(Arquivo='BC03',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =75+Aumentar_red_loop,Red_max_fx2 =62+Aumentar_red_loop_fx2,Red_max_fx3 =75+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1580+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_Q7<-data.frame(Arquivo='Q7',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =75+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =75+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_BS<-data.frame(Arquivo='BS',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =75+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =75+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_TRIP<-data.frame(Arquivo='TRIP',Red_min_fx1 =12+redmin_loop,Red_min_fx2 =12+redmin_loopfx2,Red_min_fx3 =12+redmin_loopfx2,Red_max_fx1 =42+Aumentar_red_loop,Red_max_fx2 =42+Aumentar_red_loop_fx2,Red_max_fx3 =42+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_DEMAIS<-data.frame(Arquivo='DEMAIS',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =62+Aumentar_red_loop,Red_max_fx2 =62+Aumentar_red_loop_fx2,Red_max_fx3 =62+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =65,Red_max_fx2 =57,Red_max_fx3 =62,Incerteza=12,Tol_agrup=1,Lg_tran=1250,Lg_tran2=1550,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  #df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =24,Red_min_fx2 =24,Red_min_fx3 =24,Red_max_fx1 =65,Red_max_fx2 =57,Red_max_fx3 =62,Incerteza=12,Tol_agrup=1,Lg_tran=1250,Lg_tran2=1550,IL=40,Aumentar_media =1,stringsAsFactors = F)
   
-  red_min_fx1 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para LG<=lg_tran_fx
-  red_min_fx2 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx <LG <=lg_tran_fx2
-  red_min_fx3 <- c(18,18,18,18,18,18,16,12,18) #(18-12=6) para lg_tran_fx2<LG
-  incerteza<-c(12,12,12,12,12,12,12,12,12)
-  tol_agrup<-c(1,1,1,1,1,1,1,2,2)
-  il<-c(40,40,40,40,40,40,40,40,40)
+  df_redmax<-rbind(df_UBC01,df_UBC02,df_UBC,df_BC,df_BC03,df_Q7,df_BS,df_TRIP,df_DEMAIS,df_MEXICO)
+  
 }else{
-  #criacao do dataframe com os parâmetros que serão utilizados
-  arquivo <- c('UBC','BC','Q7','BS','TRIP','DEMAIS')
-  lg_tran_fx <- c(1490,1490,1490,1490,1490,1490)
-  lg_tran_fx2 <- c(1490,1490,1490,1490,1490,1490)
   
-  red_max_fx1 <- c(85,75,75,75,42,62) #(85-12=73) para LG<=lg_tran_fx
-  red_max_fx2 <- c(75,62,75,75,42,62) #(85-12=73) para lg_tran_fx <LG <=lg_tran_fx2
-  red_max_fx3 <- c(75,62,75,75,42,62) #(85-12=73) para lg_tran_fx2<LG
+  df_UBC<-data.frame(Arquivo='UBC',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =85+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =85+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1729+fx_add,IL=40,Aumentar_media =Aumentar_media_loop,stringsAsFactors = F)
+  df_BC<-data.frame(Arquivo='BC',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =75+Aumentar_red_loop,Red_max_fx2 =62+Aumentar_red_loop_fx2,Red_max_fx3 =62+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1580+fx_add,IL=40,Aumentar_media =Aumentar_media_loop,stringsAsFactors = F)
+  df_Q7<-data.frame(Arquivo='Q7',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =75+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =75+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =Aumentar_media_loop,stringsAsFactors = F)
+  df_BS<-data.frame(Arquivo='BS',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =75+Aumentar_red_loop,Red_max_fx2 =75+Aumentar_red_loop_fx2,Red_max_fx3 =75+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =Aumentar_media_loop,stringsAsFactors = F)
+  df_TRIP<-data.frame(Arquivo='TRIP',Red_min_fx1 =12,Red_min_fx2 =12,Red_min_fx3 =12,Red_max_fx1 =42,Red_max_fx2 =42,Red_max_fx3 =42,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =Aumentar_media_loop,stringsAsFactors = F)
+  df_DEMAIS<-data.frame(Arquivo='DEMAIS',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =62+Aumentar_red_loop,Red_max_fx2 =62+Aumentar_red_loop,Red_max_fx3 =62+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =Aumentar_media_loop,stringsAsFactors = F)
   
-  red_min_fx1 <- c(18,18,18,16,12,18) #(18-12=6) para LG<=lg_tran_fx
-  red_min_fx2 <- c(18,18,18,16,12,18) #(18-12=6) para lg_tran_fx <LG <=lg_tran_fx2
-  red_min_fx3 <- c(18,18,18,16,12,18) #(18-12=6) para lg_tran_fx2<LG
-  incerteza<-c(12,12,12,12,12,12)
-  tol_agrup<-c(1,1,1,1,2,2)
-  il<-c(40,40,40,40,40,40)
+  definir_valor<-T
+  if(definir_valor==T){
+    df_UBC<-data.frame(Arquivo='UBC',Red_min_fx1 =18,Red_min_fx2 =18,Red_min_fx3 =18,Red_max_fx1 =85,Red_max_fx2 =75,Red_max_fx3 =85,Incerteza=12,Tol_agrup=0,Lg_tran=1490,Lg_tran2=1729,IL=40,Aumentar_media =0,stringsAsFactors = F)
+    df_BC<-data.frame(Arquivo='BC',Red_min_fx1 =18,Red_min_fx2 =18,Red_min_fx3 =18,Red_max_fx1 =75,Red_max_fx2 =62,Red_max_fx3 =62,Incerteza=12,Tol_agrup=0,Lg_tran=1490,Lg_tran2=1580,IL=40,Aumentar_media =0,stringsAsFactors = F)
+    df_Q7<-data.frame(Arquivo='Q7',Red_min_fx1 =18,Red_min_fx2 =18,Red_min_fx3 =18,Red_max_fx1 =75,Red_max_fx2 =75,Red_max_fx3 =75,Incerteza=12,Tol_agrup=0,Lg_tran=1490,Lg_tran2=1490,IL=40,Aumentar_media =1,stringsAsFactors = F)
+    df_BS<-data.frame(Arquivo='BS',Red_min_fx1 =18,Red_min_fx2 =18,Red_min_fx3 =18,Red_max_fx1 =75,Red_max_fx2 =75,Red_max_fx3 =75,Incerteza=12,Tol_agrup=0,Lg_tran=1490,Lg_tran2=1490,IL=40,Aumentar_media =1,stringsAsFactors = F)
+    df_TRIP<-data.frame(Arquivo='TRIP',Red_min_fx1 =12,Red_min_fx2 =12,Red_min_fx3 =12,Red_max_fx1 =42,Red_max_fx2 =42,Red_max_fx3 =42,Incerteza=12,Tol_agrup=0,Lg_tran=1490,Lg_tran2=1490,IL=40,Aumentar_media =0,stringsAsFactors = F)
+    df_DEMAIS<-data.frame(Arquivo='DEMAIS',Red_min_fx1 =18,Red_min_fx2 =18,Red_min_fx3 =18,Red_max_fx1 =62,Red_max_fx2 =62,Red_max_fx3 =62,Incerteza=12,Tol_agrup=0,Lg_tran=1490,Lg_tran2=1490,IL=40,Aumentar_media =1,stringsAsFactors = F)
+    
+    df_redmax<-rbind(df_UBC,df_BC,df_Q7,df_BS,df_TRIP,df_DEMAIS)
+    write.table(df_redmax, file=paste0(dir,'resumo',ifile,'.csv'),row.names=FALSE,sep=";",dec = ",")
+  }
+  
+  df_redmax<-rbind(df_UBC,df_BC,df_Q7,df_BS,df_TRIP,df_DEMAIS)
+  
 }
+print(proposta_agrupamento)
 
-
-df_redmax<-data.frame(Arquivo=arquivo,Red_min_fx1 =red_min_fx1,Red_min_fx2 =red_min_fx2,Red_min_fx3 =red_min_fx3,
-                      Red_max_fx1 =red_max_fx1,Red_max_fx2 =red_max_fx2,Red_max_fx3 =red_max_fx3,
-                      Incerteza=incerteza,Tol_agrup=tol_agrup,Lg_tran=lg_tran_fx,Lg_tran2=lg_tran_fx2,IL=il,stringsAsFactors = F)
-
-#df_redmax<-df_redmax[df_redmax[,'Arquivo']=='Q7',]
 #Essa verificação é para debug, evitando entrar no loop para checar os valores
-if(NROW(df_redmax)==1){ifile<-df_redmax[,1]}
+#df_redmax<-df_redmax[df_redmax[,'Arquivo']=='UBC',]
+#ifile<-'UBC'
 
 #chave final desse for está no final do script
-for (ifile in arquivo){ 
+for (ifile in intersect(aco_disponíveis,df_redmax$Arquivo)){ 
   print(ifile)
+  texto<-''
+  df_parametros<-df_redmax[,c('Arquivo','Red_min_fx1','Red_min_fx2','Lg_tran','Lg_tran2','Red_max_fx1','Red_max_fx2','Red_max_fx3','Aumentar_media','Tol_agrup')]
+  for(nomecolunas in names(df_parametros)) texto<-paste0(texto,nomecolunas,'=',df_parametros[df_parametros$Arquivo==ifile,nomecolunas],';')
+  texto<-paste0(texto,'Proposta ',proposta_agrupamento,'; Priorizacao ',tipo_priorizacao)
+  
   
   dir <-'d:/Agrupamento LG/'
   BD = paste0(dir,'geral.txt') 
@@ -166,121 +227,110 @@ for (ifile in arquivo){
   tabela_lg<-data.frame(lapply(tabela_lg, function(x) as.numeric(gsub(",",".",gsub(" ","", x)))))
   
   lg_ped_min <- as.numeric(749+seq(1:(1881-750)))
-  peso_inicial <- as.numeric(rep_len(1, 1881-750))
+  peso_inicial <- as.numeric(rep_len(0.001, 1881-750))
   dataframe_inicial <- data.frame(lg_ped_min,peso_inicial)
   tabela_lg<- left_join(dataframe_inicial, tabela_lg, by = c("lg_ped_min" = "lg_infln_bq"))
   tabela_lg[,2]<-tabela_lg[,2]+ifelse(is.na(tabela_lg[,3]), 0, tabela_lg[,3])
   tabela_lg[,3]<-NULL
   
-  #larg_prior <-c(1050,1250,1550,1840)
+  aumentar_lg_media<-df_redmax[df_redmax$Arquivo==ifile,'Aumentar_media']
   IL<-df_redmax[df_redmax$Arquivo==ifile,'IL']
   tol_agrup_lg<-df_redmax[df_redmax$Arquivo==ifile,'Tol_agrup']
   incerteza <-df_redmax[df_redmax$Arquivo==ifile,'Incerteza']
-  
-  fx1 <-df_redmax[df_redmax$Arquivo==ifile,'Red_max_fx1']-incerteza#(85-12=73)
-  fx2 <-df_redmax[df_redmax$Arquivo==ifile,'Red_max_fx2']-incerteza#(85-12=73)
-  fx3 <-df_redmax[df_redmax$Arquivo==ifile,'Red_max_fx3']-incerteza#(85-12=73)
-  red_min_1 <-df_redmax[df_redmax$Arquivo==ifile,'Red_min_fx1']-incerteza #(18-incerteza=6)
-  red_min_2 <-df_redmax[df_redmax$Arquivo==ifile,'Red_min_fx2']-incerteza #(18-incerteza=6)
-  red_min_3 <-df_redmax[df_redmax$Arquivo==ifile,'Red_min_fx3']-incerteza #(18-incerteza=6)
-  
+  fx1 <-df_redmax[df_redmax$Arquivo==ifile,'Red_max_fx1']#(85-12=73)
+  fx2 <-df_redmax[df_redmax$Arquivo==ifile,'Red_max_fx2']#(85-12=73)
+  fx3 <-df_redmax[df_redmax$Arquivo==ifile,'Red_max_fx3']#(85-12=73)
+  red_min_1 <-df_redmax[df_redmax$Arquivo==ifile,'Red_min_fx1'] #(18)
+  red_min_2 <-df_redmax[df_redmax$Arquivo==ifile,'Red_min_fx2'] #(18)
+  red_min_3 <-df_redmax[df_redmax$Arquivo==ifile,'Red_min_fx3'] #(18)
   lg_fx <-df_redmax[df_redmax$Arquivo==ifile,'Lg_tran'] #largura de transição para critérios diferentes
   lg_fx2 <-df_redmax[df_redmax$Arquivo==ifile,'Lg_tran2'] #largura de transição para critérios diferentes
   
-  tabela_lg[(tabela_lg[,1])<lg_fx2,'idfx']<-2
-  tabela_lg[(tabela_lg[,1])>=lg_fx2,'idfx']<-3
-  tabela_lg[(tabela_lg[,1]+fx1)<lg_fx,'idfx']<-1
-  tabela_lg$lg_placao <- tabela_lg[,1]+ifelse(tabela_lg$idfx==1,fx1,ifelse(tabela_lg$idfx==2,fx2,fx3)) #Ajuste para tranformar a faixa de pedido de BQ para placao
+  tabela_lg$lg_ped_max_fx1<-tabela_lg[,'lg_ped_min']+fx1-(incerteza+red_min_1)
+  tabela_lg$lg_ped_max_fx2<-tabela_lg[,'lg_ped_min']+fx2-(incerteza+red_min_2)
+  tabela_lg$lg_ped_max_fx3<-tabela_lg[,'lg_ped_min']+fx3-(incerteza+red_min_3)
   
-  tabela_lg$lg_ped_max <- tabela_lg$lg_placao-ifelse(tabela_lg$idfx==1,red_min_1,ifelse(tabela_lg$idfx==2,red_min_2,red_min_3))-incerteza
-  tabela_lg[,2]<-tabela_lg[,2]*(1+aumentar_lg_media*tabela_lg[,'lg_placao']) #tabela_lg[,2]=Qtde de placao * #tabela_lg[,'lg_placao']=Largura do placao, seria quase uma unidade de peso
+  tabela_lg[,2]<-tabela_lg[,2]*(1+aumentar_lg_media*tabela_lg[,1]) #tabela_lg[,2]=Qtde de placao * #tabela_lg[,'lg_placao']=Largura do placao, seria quase uma unidade de peso
   tabela_lg$peso_acumulado_max<-0
   tabela_lg$peso_original<-tabela_lg[,2]
   tabela_lg$peso_acum_proc<-0
-  tabela_lg$idfx<-NULL
+  tabela_lg$peso_inicial2<-tabela_lg$peso_inicial
   
   tabbk<-tabela_lg
   #tabela_lg<-tabbk
-
+  
+  
   if(exists("output")){rm("output")}
-  for (l in 1:NROW(tabela_lg)){
+  prioridade<-1
+  for (l in NROW(tabela_lg):1){
+    
     #acumula o peso das faixas de pedidos na linha da largura de cada placao 
     #É importante esse loop ficar dentro do outro loop, só assim calcula o peso e desconsidera volumes já considerados
-    for (i in 1:NROW(tabela_lg)){
-      tabela_lg[i,'peso_acumulado_max'] <- sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max'],'peso_inicial'])}
+    for (i in NROW(tabela_lg):1){
+      if(lg_fx!=lg_fx2){#otimiza velocidade de execução
+        tabela_lg[i,'peso_acumulado_max_fx1']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx1'] & tabela_lg[i,'lg_ped_max_fx1']<=lg_fx,'peso_inicial'])
+        tabela_lg[i,'peso_acumulado_max_fx2']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx2'] ,'peso_inicial'])
+        tabela_lg[i,'peso_acumulado_max_fx3']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx3'] & tabela_lg[i,'lg_ped_min']>=lg_fx2 ,'peso_inicial'])
+        tabela_lg[i,'peso_acumulado_max']<-max(c(tabela_lg[i,'peso_acumulado_max_fx1'],tabela_lg[i,'peso_acumulado_max_fx2'],tabela_lg[i,'peso_acumulado_max_fx3']))
+        tabela_lg[i,'lg_ped_max']<-ifelse(tabela_lg[i,'peso_acumulado_max']==tabela_lg[i,'peso_acumulado_max_fx1'],tabela_lg[i,'lg_ped_max_fx1'],
+                                          ifelse(tabela_lg[i,'peso_acumulado_max']==tabela_lg[i,'peso_acumulado_max_fx2'],tabela_lg[i,'lg_ped_max_fx2'],tabela_lg[i,'lg_ped_max_fx3']))
+        tabela_lg[i,'lg_placao']<-tabela_lg[i,'lg_ped_max']+ifelse(tabela_lg[i,'peso_acumulado_max']==tabela_lg[i,'peso_acumulado_max_fx1'],red_min_1,
+                                                                   ifelse(tabela_lg[i,'peso_acumulado_max']==tabela_lg[i,'peso_acumulado_max_fx2'],red_min_2,red_min_3))
+      }else{
+        tabela_lg[i,'peso_acumulado_max']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx1'],'peso_inicial'])
+        tabela_lg[i,'lg_ped_max']<-tabela_lg[i,'lg_ped_max_fx1']
+        tabela_lg[i,'lg_placao']<-tabela_lg[i,'lg_ped_max_fx1']+red_min_1
+      }
+    }
+    #tabela_lg[tabela_lg[,'peso_acumulado_max']==max(tabela_lg[,'peso_acumulado_max']),] depuracao
     
     #acha o valor que maximiza o volume
     peso_acumulado_max <- max(tabela_lg[,'peso_acumulado_max'],na.rm=TRUE)
-    lg_max <- max(tabela_lg[tabela_lg['peso_acumulado_max']==peso_acumulado_max,'lg_placao'],na.rm=TRUE)
-
+    lg_max <- min(tabela_lg[tabela_lg['peso_acumulado_max']==peso_acumulado_max,'lg_placao'],na.rm=TRUE)
+    
     #pega a maior e menor largura de pedido para o maior peso acumulado
     lg_min_pedido_temp <- min(tabela_lg[tabela_lg[,'lg_placao']==lg_max,'lg_ped_min'],na.rm=TRUE)
     lg_max_pedido_temp <- max(tabela_lg[tabela_lg[,'lg_placao']==lg_max,'lg_ped_max'],na.rm=TRUE)
     
+    faixa_temp<-paste0(lg_min_pedido_temp,'~',lg_max_pedido_temp)
+    
     #limpa o peso de faixas já usadas
-    tabela_lg[tabela_lg[,'lg_ped_min']>=lg_min_pedido_temp & tabela_lg[,'lg_ped_min']<=lg_max_pedido_temp,'peso_inicial']<- 0 
-    
+    peso_acumulado_geral<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=lg_min_pedido_temp & tabela_lg[,'lg_ped_min']<=lg_max_pedido_temp,'peso_original'])
+    tabela_lg[tabela_lg[,'lg_ped_min']>=lg_min_pedido_temp & tabela_lg[,'lg_ped_min']<=lg_max_pedido_temp,'peso_inicial']<-0
     if(sum(tabela_lg[,'peso_inicial'],na.rm = T)>0){
-      output_temp<- data.frame(lg_placao=lg_max,lg_ped_min=lg_min_pedido_temp,lg_ped_max=lg_max_pedido_temp,peso_acum=peso_acumulado_max)
+      output_temp<- data.frame(lg_placao=lg_max,lg_ped_min=lg_min_pedido_temp,lg_ped_max=lg_max_pedido_temp,peso_acum=peso_acumulado_max,peso_acum_geral=peso_acumulado_geral,prioridade=prioridade)
       if(exists("output")){output<-rbind(output_temp,output)}else{output<-output_temp}
+      prioridade<-prioridade+1
     }else{break()}
-    
   }
-
-  #cria uma coluna para indicar a priorização das larguras mais importantes por volume associado
-  tabela_lg<-output[order(-output[,'peso_acum']),] 
-  tabela_lg$prioridade <- seq.int(nrow(tabela_lg))
-  tabela_lg<-tabela_lg[order(tabela_lg[,'lg_placao'],tabela_lg[,'lg_ped_min']),]
-  #write.table(tabela_lg, file="D:/Agrupamento LG/tabela_lg2.csv",row.names=F,sep=';',dec = ".")
-
+  lgbq<-tabela_lg[,c('lg_ped_min','peso_original')]
   
-  #otimiza faixas redundantes ou absurdas
-  # dentro da função ajuste_lg_adjacentes foi comentado um código para que esse loop do código principal possa limpar as faixas redundantes ou absurdas
-  for (idloop in 1:1){
-    
-    for (i in 1:(NROW(tabela_lg)-1)){#CORRIGE EVENTUAIS DUPLICIDADES GERADAS A PARTIR DE TRANSICAO DE FAIXAS
-      if(tabela_lg[i,'lg_placao']==tabela_lg[i+1,'lg_placao']){
-        tabela_lg[i,'lg_ped_max']<-tabela_lg[i+1,'lg_ped_max']
-        tabela_lg[(i+1),'lg_placao']<-0}}
-    tabela_lg<-tabela_lg[tabela_lg[,'lg_placao']>0,]
-    tabela_lg<-tabela_lg[order(tabela_lg$prioridade),]
-    tabela_lg$prioridade<-seq.int(nrow(tabela_lg))
-    tabela_lg<-tabela_lg[order(tabela_lg$lg_placao),]
-    
-    tabela_lg_temp<-ajuste_lg_adjacentes(tabela_lg,incerteza,lg_fx,lg_fx2,fx1,fx2,fx3,red_min_1,red_min_2,red_min_3,TAPER=IL)
-    tabela_lg[,1:3]<-tabela_lg_temp[,1:3]
-  }
   
-  #PREENCHER VAZIOS DE INTERFACE--------------------------------------------------------
-  if(exists("output_temp2")){rm("output_temp2")}
-  for(achar_vazio in 1:(NROW(output)-1)){#caso existam vazios entre linhas adjacentes
-    if((tabela_lg[achar_vazio+1,2]-tabela_lg[achar_vazio,3])>1){
-      output_temp<- data.frame(lg_placao=ifelse(tabela_lg[achar_vazio+1,1]!=(tabela_lg[achar_vazio,3]+20),tabela_lg[achar_vazio,3]+20,tabela_lg[achar_vazio+1,1]-1),lg_ped_min=tabela_lg[achar_vazio,3]+1,lg_ped_max=tabela_lg[achar_vazio+1,2]-1,peso_acum=1,prioridade=NROW(tabela_lg))
-      if(exists("output_temp2")){output_temp2<-rbind(output_temp2,output_temp)}else{output_temp2<-output_temp}}}
-  
-  if(exists("output_temp2")){
-  tabela_lg<-rbind(tabela_lg,output_temp2)
+  #aqui as faixas são ajustadas...
+  #Dentro da função ajuste_lg_adjacentes foi comentado um código para que esse loop do código principal possa limpar as faixas redundantes ou absurdas
+  tabela_lg<-ajuste_lg_adjacentes(output,red_min1=red_min_1,red_min2=red_min_2,red_min3=red_min_3,
+                                  red_max1=(fx1-incerteza),red_max2=(fx2-incerteza),red_max3=(fx3-incerteza),
+                                  Lg_tran=lg_fx,Lg_tran2=lg_fx2,tol_agrup = tol_agrup,prioriza_O0_P1=tipo_priorizacao,IL=40)
+  #atualiza o peso correto da faixa
+  for(i in 1:NROW(tabela_lg)){tabela_lg[i,'peso_acum']<-sum(lgbq[lgbq[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & lgbq[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max'],'peso_original'])}
+  #atualiza a prioridade
   tabela_lg<-tabela_lg[order(-tabela_lg[,'peso_acum']),] 
   tabela_lg$prioridade <- seq.int(nrow(tabela_lg))
-  tabela_lg<-tabela_lg[order(tabela_lg[,'lg_placao'],tabela_lg[,'lg_ped_min']),]}
-  #PREENCHER VAZIOS DE INTERFACE--------------------------------------------------------
+  tabela_lg<-tabela_lg[order(tabela_lg[,'lg_ped_min']),]
   
-  #parte que otimiza as faixas que possuem pequenas diferenças (tol_agrup_lg)-----------
-  for (j in 2:NROW(tabela_lg)){
-    if((tabela_lg[j,2]-tabela_lg[j-1,2])<=tol_agrup_lg){
-      tabela_lg[j,2]<-tabela_lg[j-1,2]
-      tabela_lg[j,4]<-tabela_lg[j,4]+tabela_lg[j-1,4]
-      tabela_lg[j-1,]<-NA}
-  }
-  tabela_lg<-tabela_lg[complete.cases(tabela_lg),]
-  #parte que otimiza as faixas que possuem pequenas diferenças (tol_agrup_lg)-----------
+  
+  
+  #depurar
+  #for(achar_vazio in 1:(NROW(tabela_lg)-1)){if((tabela_lg[achar_vazio+1,2]-tabela_lg[achar_vazio,3])>1){print(paste0(tabela_lg[achar_vazio,3],'~',tabela_lg[achar_vazio+1,2]))}}
   
   #Criando campos dos delta minimo e máximo entre lg de placao e pedido
   tabela_lg$lg_placao_pedido_max <-(tabela_lg[,1]-tabela_lg[,2])
   tabela_lg$lg_placao_pedido_min <-(tabela_lg[,1]-tabela_lg[,3])
+  tabela_lg$parametros<-texto
   
   #Salva o arquivo para leitura
   write.table(tabela_lg, file=paste0(dir,'otimizado_',ifile,'.csv'),row.names=FALSE,sep=";",dec = ".")
+  #write.table(tabela_lg, file=paste0(dir,texto,'.csv'),row.names=FALSE,sep=";",dec = ".")
   
 }# chave do loop do arquivo
 
@@ -315,7 +365,7 @@ if(proposta_agrupamento=='LTQ'){
   }else{
     list_padrao<-list(UBC=ubc[1],BC=bc[1],Q7=q7[1],BS=bs[1],TRIP=trip[1],DEMAIS=demais[1])}
 }
-  
+arquivo<-df_redmax[,'Arquivo']
 for (ifile in arquivo){ 
   tabela_lg <- read.table(file=paste0('d:/Agrupamento LG/otimizado_',ifile,'.csv'), header = TRUE, sep=';',dec = ".", stringsAsFactors = FALSE)
   for (sgf in list_padrao[[ifile]]){
@@ -341,3 +391,15 @@ for (ifile in arquivo){
 tabela_lg<-tabela_lg[order(tabela_lg_temp$aco,tabela_lg_temp$sgf_ini,tabela_lg_temp$lg_placao,decreasing = c(FALSE, TRUE, FALSE)),]
 write.table(processado_geral, file=paste0(dir,'otimizado_processado_geral.csv'),row.names=FALSE,sep=";",dec = ".")
 rm(processado_geral)
+
+
+if(length(aco_disponíveis)!=length(df_redmax$Arquivo)){
+  print("Atenção, nem todas opções esperadas foram processadas.........!!!!!!!!!!!!!!!!!!!!!")}
+
+########################################################################################################################################################################################################################################################
+########################################################################################################################################################################################################################################################
+########################################################################################################################################################################################################################################################
+#                                                                                                            Otimizador de larguras
+########################################################################################################################################################################################################################################################
+########################################################################################################################################################################################################################################################
+########################################################################################################################################################################################################################################################
