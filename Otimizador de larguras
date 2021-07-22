@@ -120,13 +120,13 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
     if((x[achar_vazio+1,2]-x[achar_vazio,3])>1){
       
       #Qual a redução mínima adequada...
+      reducao_minina<-red_min2
       if(x[achar_vazio+1,2]<Lg_tran){reducao_minina<-red_min1}
-      if(x[achar_vazio,3]>=Lg_tran & x[achar_vazio+1,2]<=Lg_tran2){reducao_minina<-red_min2}
       if(x[achar_vazio,3]>Lg_tran2){reducao_minina<-red_min3}
       
       #Qual a redução máxima adequada...
+      reducao_maxima<-red_max2
       if(x[achar_vazio+1,2]<Lg_tran){reducao_maxima<-red_max1}
-      if(x[achar_vazio,3]>=Lg_tran & x[achar_vazio+1,2]<=Lg_tran2){reducao_maxima<-red_max2}
       if(x[achar_vazio,3]>Lg_tran2){reducao_maxima<-red_max3}
       
       lg_placao_temp<-x[achar_vazio,3]+1+reducao_maxima-incerteza
