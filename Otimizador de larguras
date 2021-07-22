@@ -87,6 +87,7 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
       id_chave<-0
       for(loop_test in 0:5){
         lg_temp_medio<-lg_temp_medio+loop_test*idmult
+        
         if(abs(lg_placao_post-lg_temp_medio)<=IL & abs(lg_temp_medio-lg_placao_ant)<=IL &
            lg_temp_medio>=(lg_pedmax_atual+reducao_minina) & lg_temp_medio<=(lg_pedinf_atual+reducao_maxima) &
            length(x[x[,'lg_placao']==lg_temp_medio,'lg_placao'])==0 & id_chave==0){
@@ -121,12 +122,12 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
       
       #Qual a redução mínima adequada...
       reducao_minina<-red_min2
-      if(x[achar_vazio+1,2]<Lg_tran){reducao_minina<-red_min1}
+      if(x[achar_vazio,3]<Lg_tran){reducao_minina<-red_min1}
       if(x[achar_vazio,3]>Lg_tran2){reducao_minina<-red_min3}
       
       #Qual a redução máxima adequada...
       reducao_maxima<-red_max2
-      if(x[achar_vazio+1,2]<Lg_tran){reducao_maxima<-red_max1}
+      if(x[achar_vazio,3]<Lg_tran){reducao_maxima<-red_max1}
       if(x[achar_vazio,3]>Lg_tran2){reducao_maxima<-red_max3}
       
       lg_placao_temp<-x[achar_vazio,3]+1+reducao_maxima-incerteza
@@ -144,7 +145,7 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
     for(i in 1:NROW(x)){
       reducao_maxima<-red_max2
       if(x[i,'lg_ped_max']<Lg_tran){reducao_maxima<-red_max1}
-      if(x[i,'lg_ped_min']>Lg_tran2){reducao_maxima<-red_max3}
+      if(x[i,'lg_ped_max']>Lg_tran2){reducao_maxima<-red_max3}
       x[i,'lg_placao']<-x[i,'lg_ped_min']+reducao_maxima
     }
   }
@@ -171,7 +172,6 @@ fx_add<-0
 
 
 
-
 #criacao do dataframe com os parâmetros que serão utilizados
 if(proposta_agrupamento=='LTQ'){
   #aumentar_lg_media<-1 busca também subir a largura média da placa.
@@ -185,9 +185,8 @@ if(proposta_agrupamento=='LTQ'){
   df_BS<-data.frame(Arquivo='DP9890',Red_min_fx1 =14+redmin_loop,Red_min_fx2 =14+redmin_loopfx2,Red_min_fx3 =14+redmin_loopfx2,Red_max_fx1 =76+Aumentar_red_loop,Red_max_fx2 =76+Aumentar_red_loop_fx2,Red_max_fx3 =76+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =0,stringsAsFactors = F)
   df_TRIP<-data.frame(Arquivo='TRIP',Red_min_fx1 =12+redmin_loop,Red_min_fx2 =12+redmin_loopfx2,Red_min_fx3 =12+redmin_loopfx2,Red_max_fx1 =42+Aumentar_red_loop,Red_max_fx2 =42+Aumentar_red_loop_fx2,Red_max_fx3 =42+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
   df_DEMAIS<-data.frame(Arquivo='DEMAIS',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =62+Aumentar_red_loop,Red_max_fx2 =62+Aumentar_red_loop_fx2,Red_max_fx3 =62+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
-  df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =65,Red_max_fx2 =57,Red_max_fx3 =62,Incerteza=12,Tol_agrup=1,Lg_tran=1250,Lg_tran2=1550,IL=40,Aumentar_media =1,stringsAsFactors = F)
-  df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =85,Red_max_fx2 =85,Red_max_fx3 =85,Incerteza=12,Tol_agrup=1,Lg_tran=1250,Lg_tran2=1550,IL=40,Aumentar_media =1,stringsAsFactors = F)
   df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =93,Red_max_fx2 =85,Red_max_fx3 =69,Incerteza=12,Tol_agrup=0,Lg_tran=1100,Lg_tran2=1344,IL=40,Aumentar_media =0,stringsAsFactors = F)
+  df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =67,Red_max_fx2 =60,Red_max_fx3 =50,Incerteza=12,Tol_agrup=0,Lg_tran=1100,Lg_tran2=1344,IL=40,Aumentar_media =0,stringsAsFactors = F)
   
   
   df_redmax<-rbind(df_UBC01,df_UBC02,df_UBC,df_BC,df_BC03,df_Q7,df_BS,df_TRIP,df_DEMAIS,df_MEXICO)
