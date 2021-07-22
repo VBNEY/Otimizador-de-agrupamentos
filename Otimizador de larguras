@@ -1,14 +1,13 @@
-
 #Estrutura de leitura lg_infln_bq	Peso
 dir <-'d:/Agrupamento LG/'
 BD = paste0(dir,'geral.txt') 
 tabela_lg <- read.table(file = BD, header = TRUE, sep='\t',dec = ".", stringsAsFactors = FALSE)
 aco_disponíveis<-unique(tabela_lg$grupo_aco) #importante para garantir que somente coincidente sejam processados
-aco_disponíveis<-c('DP9890')
+aco_disponíveis<-c('BC-MEX')
 rm("tabela_lg")
 
 library(dplyr)
-ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,red_max3,Lg_tran,Lg_tran2,tol_agrup=1,prioriza_O0_P1=0,IL=40){
+ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,red_max3,Lg_tran,Lg_tran2,tol_agrup=1,prioriza_O0_P1=0,IL=40,otimiza=T){
   x<-x[x[,'lg_ped_min']<=x[,'lg_ped_max'],]
   if(prioriza_O0_P1==1){
     x<-x[order(-x[,'peso_acum_geral']),] 
@@ -68,7 +67,7 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
       #se ML for maior que 40mm para qualquer lado, aproxima do de maior volume
       lgfxmin<-lg_pedinf_atual+reducao_minina
       lgfxmax<-lg_pedinf_atual+reducao_maxima
-        
+      
       if(prior_ant<prior_post){
         lg_temp_medio<-lg_pedmax_atual+reducao_minina
         fx_temp<-lgfxmax:lgfxmin
@@ -78,7 +77,7 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
         fx_temp<-lgfxmin:lgfxmax
         idmult<--1
       }
-        
+      
       for(lg_temp in fx_temp){
         if((lg_temp-lg_placao_ant)<=IL & (lg_placao_post-lg_temp)<=IL){
           lg_temp_medio<-lg_temp
@@ -89,10 +88,10 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
       for(loop_test in 0:5){
         lg_temp_medio<-lg_temp_medio+loop_test*idmult
         if(abs(lg_placao_post-lg_temp_medio)<=IL & abs(lg_temp_medio-lg_placao_ant)<=IL &
-            lg_temp_medio>=(lg_pedmax_atual+reducao_minina) & lg_temp_medio<=(lg_pedinf_atual+reducao_maxima) &
-            length(x[x[,'lg_placao']==lg_temp_medio,'lg_placao'])==0 & id_chave==0){
-            id_chave<-1
-            lg_placao_atual<-lg_temp_medio}
+           lg_temp_medio>=(lg_pedmax_atual+reducao_minina) & lg_temp_medio<=(lg_pedinf_atual+reducao_maxima) &
+           length(x[x[,'lg_placao']==lg_temp_medio,'lg_placao'])==0 & id_chave==0){
+          id_chave<-1
+          lg_placao_atual<-lg_temp_medio}
       }
       x[indice,'lg_placao']<-lg_placao_atual
       x[indice,'iduso']<-1
@@ -121,13 +120,13 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
     if((x[achar_vazio+1,2]-x[achar_vazio,3])>1){
       
       #Qual a redução mínima adequada...
-      reducao_minina<-red_min2
       if(x[achar_vazio+1,2]<Lg_tran){reducao_minina<-red_min1}
+      if(x[achar_vazio,3]>=Lg_tran & x[achar_vazio+1,2]<=Lg_tran2){reducao_minina<-red_min2}
       if(x[achar_vazio,3]>Lg_tran2){reducao_minina<-red_min3}
       
       #Qual a redução máxima adequada...
-      reducao_maxima<-red_max2
       if(x[achar_vazio+1,2]<Lg_tran){reducao_maxima<-red_max1}
+      if(x[achar_vazio,3]>=Lg_tran & x[achar_vazio+1,2]<=Lg_tran2){reducao_maxima<-red_max2}
       if(x[achar_vazio,3]>Lg_tran2){reducao_maxima<-red_max3}
       
       lg_placao_temp<-x[achar_vazio,3]+1+reducao_maxima-incerteza
@@ -138,6 +137,17 @@ ajuste_lg_adjacentes<-function(x,red_min1,red_min2,red_min3,red_max1,red_max2,re
   x<-x[order(-x[,'peso_acum']),] 
   x$prioridade <- seq.int(nrow(x))
   x<-x[order(x[,'lg_ped_min']),]
+  
+  
+  #DESFAZER OTIMIZAÇÃO....AMLC
+  if(otimiza==F){
+    for(i in 1:NROW(x)){
+      reducao_maxima<-red_max2
+      if(x[i,'lg_ped_max']<Lg_tran){reducao_maxima<-red_max1}
+      if(x[i,'lg_ped_min']>Lg_tran2){reducao_maxima<-red_max3}
+      x[i,'lg_placao']<-x[i,'lg_ped_min']+reducao_maxima
+    }
+  }
   return(x)
 }
 simular0_gerarpadrao1<-1 #gerar padrao por SGF ltq ou grupo de aco para simulacao
@@ -177,7 +187,7 @@ if(proposta_agrupamento=='LTQ'){
   df_DEMAIS<-data.frame(Arquivo='DEMAIS',Red_min_fx1 =18+redmin_loop,Red_min_fx2 =18+redmin_loopfx2,Red_min_fx3 =18+redmin_loopfx2,Red_max_fx1 =62+Aumentar_red_loop,Red_max_fx2 =62+Aumentar_red_loop_fx2,Red_max_fx3 =62+Aumentar_red_loop,Incerteza=12,Tol_agrup=tol_agrup,Lg_tran=1490+fx_add,Lg_tran2=1490+fx_add,IL=40,Aumentar_media =1,stringsAsFactors = F)
   df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =65,Red_max_fx2 =57,Red_max_fx3 =62,Incerteza=12,Tol_agrup=1,Lg_tran=1250,Lg_tran2=1550,IL=40,Aumentar_media =1,stringsAsFactors = F)
   df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =85,Red_max_fx2 =85,Red_max_fx3 =85,Incerteza=12,Tol_agrup=1,Lg_tran=1250,Lg_tran2=1550,IL=40,Aumentar_media =1,stringsAsFactors = F)
-  #df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =24,Red_min_fx2 =24,Red_min_fx3 =24,Red_max_fx1 =65,Red_max_fx2 =57,Red_max_fx3 =62,Incerteza=12,Tol_agrup=1,Lg_tran=1250,Lg_tran2=1550,IL=40,Aumentar_media =1,stringsAsFactors = F)
+  df_MEXICO<-data.frame(Arquivo='BC-MEX',Red_min_fx1 =16,Red_min_fx2 =16,Red_min_fx3 =16,Red_max_fx1 =93,Red_max_fx2 =85,Red_max_fx3 =69,Incerteza=12,Tol_agrup=0,Lg_tran=1100,Lg_tran2=1344,IL=40,Aumentar_media =0,stringsAsFactors = F)
   
   
   df_redmax<-rbind(df_UBC01,df_UBC02,df_UBC,df_BC,df_BC03,df_Q7,df_BS,df_TRIP,df_DEMAIS,df_MEXICO)
@@ -211,7 +221,7 @@ print(proposta_agrupamento)
 
 #Essa verificação é para debug, evitando entrar no loop para checar os valores
 #df_redmax<-df_redmax[df_redmax[,'Arquivo']=='UBC',]
-#ifile<-'DP9890'
+#ifile<-'BC-MEX'
 
 #chave final desse for está no final do script
 for (ifile in intersect(aco_disponíveis,df_redmax$Arquivo)){ 
@@ -244,7 +254,7 @@ for (ifile in intersect(aco_disponíveis,df_redmax$Arquivo)){
     vetor_fx<-tabela_lg[,1]>tab_base[nlg_base,1] & tabela_lg[,1]<tab_base[nlg_base+1,1]
     if(peso_base_temp1<peso_base_temp2){
       tabela_lg[vetor_fx,2]<-tabela_lg[vetor_fx,2]+as.numeric(rep_len(sum(vetor_fx),sum(vetor_fx)))/1000
-      }else{
+    }else{
       tabela_lg[vetor_fx,2]<-tabela_lg[vetor_fx,2]*0.5
     }
   }
@@ -285,9 +295,9 @@ for (ifile in intersect(aco_disponíveis,df_redmax$Arquivo)){
     #É importante esse loop ficar dentro do outro loop, só assim calcula o peso e desconsidera volumes já considerados
     for (i in NROW(tabela_lg):1){
       if(lg_fx!=lg_fx2){#otimiza velocidade de execução
-        tabela_lg[i,'peso_acumulado_max_fx1']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx1'] & tabela_lg[i,'lg_ped_max_fx1']<=lg_fx,'peso_inicial'])
-        tabela_lg[i,'peso_acumulado_max_fx2']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx2'] ,'peso_inicial'])
-        tabela_lg[i,'peso_acumulado_max_fx3']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx3'] & tabela_lg[i,'lg_ped_min']>=lg_fx2 ,'peso_inicial'])
+        tabela_lg[i,'peso_acumulado_max_fx1']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx1'] & tabela_lg[,'lg_ped_min']<lg_fx,'peso_inicial'])
+        tabela_lg[i,'peso_acumulado_max_fx2']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx2'] & tabela_lg[,'lg_ped_min']>=lg_fx & tabela_lg[,'lg_ped_min']<=lg_fx2 ,'peso_inicial'])
+        tabela_lg[i,'peso_acumulado_max_fx3']<-sum(tabela_lg[tabela_lg[,'lg_ped_min']>=tabela_lg[i,'lg_ped_min'] & tabela_lg[,'lg_ped_min']<=tabela_lg[i,'lg_ped_max_fx3'] & tabela_lg[,'lg_ped_min']>lg_fx2 ,'peso_inicial'])
         tabela_lg[i,'peso_acumulado_max']<-max(c(tabela_lg[i,'peso_acumulado_max_fx1'],tabela_lg[i,'peso_acumulado_max_fx2'],tabela_lg[i,'peso_acumulado_max_fx3']))
         tabela_lg[i,'lg_ped_max']<-ifelse(tabela_lg[i,'peso_acumulado_max']==tabela_lg[i,'peso_acumulado_max_fx1'],tabela_lg[i,'lg_ped_max_fx1'],
                                           ifelse(tabela_lg[i,'peso_acumulado_max']==tabela_lg[i,'peso_acumulado_max_fx2'],tabela_lg[i,'lg_ped_max_fx2'],tabela_lg[i,'lg_ped_max_fx3']))
@@ -321,7 +331,6 @@ for (ifile in intersect(aco_disponíveis,df_redmax$Arquivo)){
     }else{break()}
   }
   lgbq<-tabela_lg[,c('lg_ped_min','peso_original')]
-  
   
   #aqui as faixas são ajustadas...
   #Dentro da função ajuste_lg_adjacentes foi comentado um código para que esse loop do código principal possa limpar as faixas redundantes ou absurdas
